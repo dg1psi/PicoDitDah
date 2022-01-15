@@ -13,3 +13,13 @@ In addition only a stereo jack to connect the morse code paddle to the Raspberry
 By default GPIO 3 is used for DIT and GPIO 4 for DAT. The ground pin must be connected to the ground of the Raspberry Pi Pico board.
 
 The default GPIO configuration can be changed in the file `cw_generator.cpp`.
+
+# Software
+Once connected to the computer, the device provides two interfaces. One USB microphone and a serial port.
+
+To change the amplitude of the morse code sine wave, use the operating system controls.
+
+More details, like the WPM speed, can be configured using the serial port. The device uses the [WinKeyer3 protocol by K1EL](https://www.k1elsystems.com/WK3IC.html) (see the datasheet at the bottom of the page).
+
+## Please note:
+At the moment the settings are not saved. The device will always return to the default settings upon reboot.
