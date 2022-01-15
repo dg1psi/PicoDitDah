@@ -5,6 +5,8 @@ The USB code uses the [TinyUSB library](https://github.com/hathach/tinyusb) to a
 
 The code for the microphone is based on the [audio-test example](https://github.com/hathach/tinyusb/tree/4bfab30c02279a0530e1a56f4a7c539f2d35a293/examples/device/audio_test) from the TinyUSB library and the [USB Microphone example](https://github.com/ArmDeveloperEcosystem/microphone-library-for-pico/tree/main/examples/usb_microphone) by ArmDeveloperEcoSystem.
 
+To debounce the paddle keys the [PIO Button Debouncer by GitJer](https://github.com/GitJer/Some_RPI-Pico_stuff/tree/main/Button-debouncer) is used.
+
 # Hardware
 I use a [adafruit ItsyBitsy RP2040](https://learn.adafruit.com/adafruit-itsybitsy-rp2040) for development and a [adafruit QT Py RP2040](https://learn.adafruit.com/adafruit-qt-py-2040) for the final device.
 
