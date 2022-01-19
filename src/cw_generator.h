@@ -182,6 +182,11 @@ private:
     void init_buffers();
 
     /*
+     * clears the character queue
+     */
+    void clear_queue();
+
+    /*
      * helper function to set a new state of the CW state machine
      * @param ch: character to be send out
      * @param ws2812_color: color of the Neopixel LED

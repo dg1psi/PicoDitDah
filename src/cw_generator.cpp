@@ -147,6 +147,13 @@ void CWGenerator::init_buffers() {
 }
 
 /*
+ * clears the character queue
+ */
+void CWGenerator::clear_queue() {
+    while (queue_try_remove(&cw_character_queue, &(curchar))) {}
+}
+
+/*
  * set the integrated Neopixel to the specified color
  * @param pixel_grb: color of the Neopixel LED (r << 8 | g << 16 | b)
  */
@@ -289,13 +296,17 @@ void CWGenerator::update_statemachine() {
         inchar_index = 0;
 
         if (nextstate == STATE_DIT) {
+            clear_queue();
             set_state(CHAR_DIT, WS2812_COLOR_PADDLE);
         } else if (nextstate == STATE_DAH) {
+            clear_queue();
             set_state(CHAR_DAH, WS2812_COLOR_PADDLE);
         } else {
             if (debouncer.read(DIT_GPIO) == 0) {
+                clear_queue();
                 set_state(CHAR_DIT, WS2812_COLOR_PADDLE);
             } else if (debouncer.read(DAH_GPIO) == 0) {
+                clear_queue();
                 set_state(CHAR_DAH, WS2812_COLOR_PADDLE);
             } else if (queue_try_remove(&cw_character_queue, &(curchar)) == true) {
                 set_state(curchar, WS2812_COLOR_SERIAL);
