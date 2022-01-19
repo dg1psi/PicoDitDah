@@ -26,8 +26,10 @@
 #include "cw_generator.h"
 
 #include "../button-debouncer/button_debounce.h"
+#include "hardware/clocks.h"
+#include "ws2812.pio.h"
 
-/* 
+/*
  * class that generates and audio buffer that contains morse code signals.
  */
 
@@ -43,14 +45,34 @@
 #define DEFAULT_WPM 20              // default speed for the morse code in WPM (Words Per Minute)
 #define DEFAULT_VOLUME 100          // default volume [%] of the morse signal
 
-/* 
+// NeoPixel (WS2812) configuration
+#define IS_RGBW true
+#ifdef PICO_DEFAULT_WS2812_PIN
+    #define WS2812_PIN PICO_DEFAULT_WS2812_PIN
+#else
+    // default to pin 2 if the board doesn't have a default WS2812 pin defined
+    #define WS2812_PIN 2
+#endif
+
+#ifdef PICO_DEFAULT_WS2812_POWER_PIN
+    #define WS2812_POWER_PIN PICO_DEFAULT_WS2812_POWER_PIN
+#else
+    // default to pin 1 if the board doesn't have a default WS2812 power pin defined
+    #define WS2821_POWER_PIN 1
+#endif
+
+#define WS2812_COLOR_PADDLE ((uint32_t) (255) << 8) | ((uint32_t) (255) << 16) | (uint32_t) (255)           // r << 8 | g << 16 | b
+#define WS2812_COLOR_SERIAL ((uint32_t) (0) << 8) | ((uint32_t) (255) << 16) | (uint32_t) (0)
+#define WS2812_COLOR_OFF ((uint32_t) (0) << 8) | ((uint32_t) (0) << 16) | (uint32_t) (0)
+
+/*
  * constructor for the morse code sound generator with default frequency and speed
  * @param sample_rate: sample rate of the audio signal
  * @param sample_buffer_size: size of the buffer used to transmit the audio signal
  */
 CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size) : CWGenerator(sample_rate, sample_buffer_size, DEFAULT_FREQUENCY, DEFAULT_WPM, DEFAULT_VOLUME) {}
 
-/* 
+/*
  * constructor for the morse code sound generator
  * @param sample_rate: sample rate of the audio signal
  * @param sample_buffer_size: size of the buffer used to transmit the audio signal
@@ -71,6 +93,7 @@ CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size, uint
 
     init_buffers();
 
+    // initialize GPIO for paddle
     gpio_init(DIT_GPIO);
     gpio_init(DAH_GPIO);
     gpio_set_dir(DIT_GPIO, false);
@@ -79,6 +102,17 @@ CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size, uint
     gpio_pull_up(DAH_GPIO);
     debouncer.debounce_gpio(DIT_GPIO);
     debouncer.debounce_gpio(DAH_GPIO);
+
+    // initialize PIO used for Neopixel LED
+    ws2812_pio = pio1;              // use PIO1 as default (PIO0 is used for button debouncer)
+    ws2812_sm = pio_claim_unused_sm(ws2812_pio, true);
+    uint offset = pio_add_program(ws2812_pio, &ws2812_program);
+    gpio_init(WS2812_POWER_PIN);
+    gpio_set_dir(WS2812_POWER_PIN, true);
+    gpio_put(WS2812_POWER_PIN, true);                                                       // enable Neopixel LED
+
+    ws2812_program_init(ws2812_pio, ws2812_sm, offset, WS2812_PIN, 800000, IS_RGBW);
+    put_pixel(WS2812_COLOR_OFF);
 
     queue_init(&cw_character_queue, sizeof(CW_CHARACTERS), queue_max_char);
 }
@@ -112,25 +146,33 @@ void CWGenerator::init_buffers() {
     inchar_index = 0;
 }
 
-/* 
+/*
+ * set the integrated Neopixel to the specified color
+ * @param pixel_grb: color of the Neopixel LED (r << 8 | g << 16 | b)
+ */
+inline void CWGenerator::put_pixel(uint32_t pixel_grb) {
+    pio_sm_put_blocking(ws2812_pio, ws2812_sm, pixel_grb << 8u);
+}
+
+/*
  * set the audio frequency in Hz of the sine wave
  * @param freq: frequency of the audio signal.
- *              the value must be between [audio_minfreq, audio_maxfreq] 
+ *              the value must be between [audio_minfreq, audio_maxfreq]
  */
 void CWGenerator::set_frequency(uint16_t freq) {
     cw_frequency = freq;
     init_buffers();
 }
 
-/* 
+/*
  * set the audio frequency in Hz of the sine wave
- * @return frequency of the audio signal. 
+ * @return frequency of the audio signal.
  */
 uint16_t CWGenerator::get_frequency() {
     return (cw_frequency);
 }
 
-/* 
+/*
  * set the speed auf the morse signal in WPM (Words Per Minute)
  * @param wpm: the speed in WPM
  */
@@ -139,7 +181,7 @@ void CWGenerator::set_wpm(uint16_t wpm) {
     init_buffers();
 }
 
-/* 
+/*
  * get the speed auf the morse signal in WPM (Words Per Minute)
  * @return the speed in WPM
  */
@@ -147,7 +189,7 @@ uint16_t CWGenerator::get_wpm() {
     return (cw_wpm);
 }
 
-/* 
+/*
  * set the volume of the morse signal [0:100]
  * @param volume: volume [%] of the morse signal
  */
@@ -161,7 +203,7 @@ void CWGenerator::set_volume(uint16_t vol) {
     }
 }
 
-/* 
+/*
  * get the volume of the morse signal
  * @return volume of the morse signal
  */
@@ -187,7 +229,7 @@ void CWGenerator::send_character(char *ch) {
 
     for (int i = 0; i < strnlen(ch, 10); i++) {             // allow up to a maximum of 10 morse code characters
         if (ch[i] == '.') {
-            cwchar = CHAR_DIT; 
+            cwchar = CHAR_DIT;
         } else if (ch[i] == '-') {
             cwchar = CHAR_DAH;
         } else {
@@ -205,9 +247,12 @@ void CWGenerator::send_character(char *ch) {
 
 /*
  * helper function to set a new state of the CW state machine
+ * @param ws2812_color: color of the Neopixel LED
  * @param ch: character to be send out
  */
-void CWGenerator::set_state(CW_CHARACTERS ch) {
+void CWGenerator::set_state(CW_CHARACTERS ch, uint32_t ws2812_color) {
+    put_pixel(ws2812_color);
+
     switch (ch) {
         case CHAR_PAUSE:
             nextstate = STATE_IDLE;
@@ -244,32 +289,34 @@ void CWGenerator::update_statemachine() {
         inchar_index = 0;
 
         if (nextstate == STATE_DIT) {
-            set_state(CHAR_DIT);
+            set_state(CHAR_DIT, WS2812_COLOR_PADDLE);
         } else if (nextstate == STATE_DAH) {
-            set_state(CHAR_DAH);
+            set_state(CHAR_DAH, WS2812_COLOR_PADDLE);
         } else {
             if (debouncer.read(DIT_GPIO) == 0) {
-                set_state(CHAR_DIT);
+                set_state(CHAR_DIT, WS2812_COLOR_PADDLE);
             } else if (debouncer.read(DAH_GPIO) == 0) {
-                set_state(CHAR_DAH);
+                set_state(CHAR_DAH, WS2812_COLOR_PADDLE);
             } else if (queue_try_remove(&cw_character_queue, &(curchar)) == true) {
-                set_state(curchar);
+                set_state(curchar, WS2812_COLOR_SERIAL);
+            } else {
+                put_pixel(WS2812_COLOR_OFF);
             }
-        }
+        } 
         nextstate = STATE_IDLE;
     } else if (inchar_index > inchar_endindex) {
         inchar_index = 0;
 
         switch (curstate) {
             case STATE_DIT:
-                set_state(CHAR_PAUSE);
+                set_state(CHAR_PAUSE, WS2812_COLOR_OFF);
                 break;
             case STATE_DAH:
-                set_state(CHAR_PAUSE);
+                set_state(CHAR_PAUSE, WS2812_COLOR_OFF);
                 break;
             case STATE_DIT_PAUSE:
                 if (debouncer.read(DAH_GPIO) == 0) {
-                    set_state(CHAR_DAH);
+                    set_state(CHAR_DAH, WS2812_COLOR_PADDLE);
                 } else {
                     curstate = STATE_IDLE;
                     // printf("STATE_IDLE\n");
@@ -277,7 +324,7 @@ void CWGenerator::update_statemachine() {
                 break;
             case STATE_DAH_PAUSE:
                 if (debouncer.read(DIT_GPIO) == 0) {
-                    set_state(CHAR_DIT);
+                    set_state(CHAR_DIT, WS2812_COLOR_PADDLE);
                 } else {
                     curstate = STATE_IDLE;
                     // printf("STATE_IDLE\n");
@@ -306,7 +353,7 @@ void CWGenerator::update_statemachine() {
     inchar_index += cw_sample_buffer_size;
 }
 
-/* 
+/*
  * Returns the audio buffer for the next transmission
  * @return buffer consisting of an array of int16_t samples
  */
@@ -328,7 +375,7 @@ void *CWGenerator::get_audio_buffer() {
     }
 }
 
-/* 
+/*
  * Returns the audio buffer size for the next transmission
  * @return buffer size in uint32_t
  */

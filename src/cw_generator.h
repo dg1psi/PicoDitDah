@@ -34,6 +34,7 @@
 #include "pico/malloc.h"
 #include "pico/stdlib.h"
 #include "pico/util/queue.h"
+#include "hardware/pio.h"
 #include "../button-debouncer/button_debounce.h"
 
 /* 
@@ -169,8 +170,11 @@ private:
     CW_STATE curstate;                          // current state of the state machine
     CW_STATE nextstate;                         // next state after the current state is finished
 
-    uint32_t inchar_index;               // sound buffer index within the current morse character
-    uint32_t inchar_endindex;            // end index in number of tone_buffer_periods
+    uint32_t inchar_index;                      // sound buffer index within the current morse character
+    uint32_t inchar_endindex;                   // end index in number of tone_buffer_periods
+
+    PIO ws2812_pio;                             // PIO used for the Neopixel LED
+    int ws2812_sm;                              // PIO statemachine for Neopixel LED
 
     /*
      * initializes the audio buffers for the currently set frequency
@@ -180,8 +184,15 @@ private:
     /*
      * helper function to set a new state of the CW state machine
      * @param ch: character to be send out
+     * @param ws2812_color: color of the Neopixel LED
      */
-    void set_state(CW_CHARACTERS ch);
+    void set_state(CW_CHARACTERS ch, uint32_t ws2812_color);
+
+    /*
+     * set the integrated Neopixel to the specified color
+     * @param pixel_grb: color of the Neopixel LED (r << 8 | g << 16 | b)
+     */
+    inline void put_pixel(uint32_t pixel_grb);
 };
 
 #endif

@@ -25,6 +25,7 @@ add_executable(picoditdah
     )
 
 pico_generate_pio_header(picoditdah ${CMAKE_CURRENT_LIST_DIR}/button-debouncer/button_debounce.pio)
+pico_generate_pio_header(picoditdah ${CMAKE_CURRENT_LIST_DIR}/ws2812/ws2812.pio)
 
 pico_set_program_name(picoditdah "picoditdah")
 pico_set_program_version(picoditdah "0.1")
