@@ -71,6 +71,10 @@ CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size, uint
 
     init_buffers();
 
+    gpio_init(DIT_GPIO);
+    gpio_init(DAH_GPIO);
+    gpio_set_dir(DIT_GPIO, false);
+    gpio_set_dir(DAH_GPIO, false);
     gpio_pull_up(DIT_GPIO);
     gpio_pull_up(DAH_GPIO);
     debouncer.debounce_gpio(DIT_GPIO);
