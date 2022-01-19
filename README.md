@@ -7,6 +7,8 @@ The code for the microphone is based on the [audio-test example](https://github.
 
 To debounce the paddle keys the [PIO Button Debouncer by GitJer](https://github.com/GitJer/Some_RPI-Pico_stuff/tree/main/Button-debouncer) is used.
 
+The code to drive the NeoPixel LED on the QT Py RP2040 or ItsyBitsy RP2040 is based on the [WS2812 example part of the pico-sdk examples](https://github.com/raspberrypi/pico-examples/tree/master/pio/ws2812).
+
 # Hardware
 I use a [adafruit ItsyBitsy RP2040](https://learn.adafruit.com/adafruit-itsybitsy-rp2040) for development and a [adafruit QT Py RP2040](https://learn.adafruit.com/adafruit-qt-py-2040) for the final device.
 
