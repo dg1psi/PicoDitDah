@@ -9,6 +9,8 @@ To debounce the paddle keys the [PIO Button Debouncer by GitJer](https://github.
 
 The code to drive the NeoPixel LED on the QT Py RP2040 or ItsyBitsy RP2040 is based on the [WS2812 example part of the pico-sdk examples](https://github.com/raspberrypi/pico-examples/tree/master/pio/ws2812).
 
+![Image of the PicoDitDah build with the adafruit QT Py RP2040](docs/PicoDitDah.jpg?raw=true)
+
 # Hardware
 I use a [adafruit ItsyBitsy RP2040](https://learn.adafruit.com/adafruit-itsybitsy-rp2040) for development and a [adafruit QT Py RP2040](https://learn.adafruit.com/adafruit-qt-py-2040) for the final device.
 
@@ -27,3 +29,8 @@ More details, like the WPM speed, can be configured using the serial port. The d
 
 ## Please note:
 At the moment the settings are not saved. The device will always return to the default settings upon reboot.
+
+# Case
+You can find a [FreeCAD](https://www.freecadweb.org/) of the case shown above in the `case` subfolder.
+
+This case fits for the [adafruit QT Py RP2040](https://learn.adafruit.com/adafruit-qt-py-2040).
