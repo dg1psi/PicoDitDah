@@ -95,6 +95,8 @@ CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size, uint
     cw_risetime = risetime;
 
     signal_buffer = NULL;
+    output_buffer = NULL;
+    cw_keyshape = NULL;
 
     init_buffers();
 
