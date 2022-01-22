@@ -79,8 +79,9 @@ public:
      * @param freq: frequency of the audio signal
      * @param wpm: speed of the morse code in WPM (Words Per Minute)
      * @param volume: volume of the signal [0:100]
+     * @param risetime: rise time of the Blackman window
      */
-    CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size, uint16_t freq, uint16_t wpm, uint16_t volume);
+    CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size, uint16_t freq, uint16_t wpm, uint16_t volume, float risetime);
 
     /* 
      * set the audio frequency in Hz of the sine wave
@@ -154,14 +155,14 @@ private:
     uint8_t cw_wpm;                             // CW speed in WPM
     uint16_t cw_frequency;                      // tone frequency in Hz
     uint16_t cw_volume;                         // volume of the audio signal [0:32767]
+    float cw_risetime;                          // rise time of keyed signal in ms
+    uint32_t cw_risetime_samples;               // nr. of samples for the rise time
+    float *cw_keyshape;                         // buffer containing the key shape factors of the Blackman window
 
-    int16_t *signal_buffer;                     // buffer containing the sine wave and the pause section
+    int16_t *signal_buffer;                     // buffer containing a single sine wave
+    int16_t *output_buffer;                     // buffer used to tramsmit the audio to the USB port
     uint32_t signal_buffer_period;              // sine wave period
-    uint32_t signal_buffer_size;                // total size of buffer including trailing pause buffer
-    uint32_t signal_buffer_pause_index;         // start index of pause buffer
     uint32_t signal_dit_length_index;           // number of samples for a DIT in the current CW speed
-
-    // int16_t *sample_buffer;                     // buffer that will be populated with the audio samples to be transmitted
 
     queue_t cw_character_queue;                 // used to send characters to the morse code state machine
     Debounce debouncer;                         // Debouncer used for the paddle input

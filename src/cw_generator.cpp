@@ -44,6 +44,10 @@
 #define DEFAULT_FREQUENCY 700       // default frequency for the audio tone
 #define DEFAULT_WPM 20              // default speed for the morse code in WPM (Words Per Minute)
 #define DEFAULT_VOLUME 100          // default volume [%] of the morse signal
+#define DEFAULT_RISETIME 4          // default risetime of the Blackman window
+
+#define WPM_MIN 10                  // minimum speed in WPM
+#define WPM_MAX 99                  // maximum speed in WPM
 
 // NeoPixel (WS2812) configuration
 #define IS_RGBW true
@@ -70,7 +74,7 @@
  * @param sample_rate: sample rate of the audio signal
  * @param sample_buffer_size: size of the buffer used to transmit the audio signal
  */
-CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size) : CWGenerator(sample_rate, sample_buffer_size, DEFAULT_FREQUENCY, DEFAULT_WPM, DEFAULT_VOLUME) {}
+CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size) : CWGenerator(sample_rate, sample_buffer_size, DEFAULT_FREQUENCY, DEFAULT_WPM, DEFAULT_VOLUME, DEFAULT_RISETIME) {}
 
 /*
  * constructor for the morse code sound generator
@@ -79,17 +83,18 @@ CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size) : CW
  * @param freq: frequency of the audio signal
  * @param wpm: speed of the morse code in WPM (Words Per Minute)
  * @param volume: volume of the signal [0:100]
+ * @param risetime: rise time of the Blackman window
  */
-CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size, uint16_t freq, uint16_t wpm, uint16_t volume) {
+CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size, uint16_t freq, uint16_t wpm, uint16_t volume, float risetime) {
     curstate = STATE_INIT;
     cw_sample_rate = sample_rate;
     cw_sample_buffer_size = sample_buffer_size;
     cw_frequency = freq;
     cw_wpm = wpm;
     cw_volume = volume * 32767 / 100;
+    cw_risetime = risetime;
 
     signal_buffer = NULL;
-    signal_buffer_size = 0;
 
     init_buffers();
 
@@ -124,6 +129,12 @@ void CWGenerator::init_buffers() {
     if (signal_buffer != NULL) {
         free(signal_buffer);
     }
+    if (output_buffer != NULL) {
+        free(output_buffer);
+    }
+    if (cw_keyshape != NULL) {
+        free(cw_keyshape);
+    }
 
     // limit the user passed audio frequency to the valid range
     cw_frequency = cw_frequency > audio_maxfreq ? audio_maxfreq : cw_frequency;
@@ -131,14 +142,22 @@ void CWGenerator::init_buffers() {
 
     // calculate the audio buffer size, the start of the pause buffer and allocate the memory
     signal_buffer_period = ceil(cw_sample_rate / (float)(cw_frequency));
-    signal_buffer_pause_index = ceil((double)(signal_buffer_period + cw_sample_buffer_size) / signal_buffer_period) * signal_buffer_period;
-    signal_buffer_size = signal_buffer_pause_index + cw_sample_buffer_size;
 
-    signal_buffer = (int16_t *)malloc(sizeof(int16_t) * signal_buffer_size);
-    memset(signal_buffer, 0, sizeof(int16_t) * signal_buffer_size);                                             // initialize buffer with silence
+    // calculate nr. of samples for envelope shaping
+    cw_risetime_samples = ceil(cw_risetime * cw_sample_rate / 1000) + 1;
 
-    for (int i = 0; i < signal_buffer_pause_index; i++) {                                                       // generate sinus wave. Remaining part is the pause buffer
+    signal_buffer = (int16_t *)malloc(sizeof(int16_t) * signal_buffer_period);
+    output_buffer = (int16_t *)malloc(sizeof(int16_t) * cw_sample_buffer_size);
+    cw_keyshape = (float *)malloc(sizeof(float) * cw_risetime_samples);
+
+    for (int i = 0; i < signal_buffer_period; i++) {                                                                     // generate a single sine wave
         signal_buffer[i] = cw_volume * sin(i * 2.0 * M_PI * (float)(cw_frequency) / (float)(cw_sample_rate));
+    }
+
+    // generate signal shaping based on Blackman: https://en.wikipedia.org/wiki/Window_function#Blackman_window
+    // we only use the first half (rise)
+    for (int i = 0; i < cw_risetime_samples; i++) {
+        cw_keyshape[i] = abs(0.42 - 0.50 * cos(M_PI * i / (cw_risetime_samples - 1)) + 0.08 * cos(2 * M_PI * i / (cw_risetime_samples - 1)));
     }
 
     signal_dit_length_index = (60 / (50 * (float)(cw_wpm))) * cw_sample_rate;                                  // length of DIT t_dit = 60 / (50 * wpm). Source: https://morsecode.world/international/timing.html
@@ -184,7 +203,8 @@ uint16_t CWGenerator::get_frequency() {
  * @param wpm: the speed in WPM
  */
 void CWGenerator::set_wpm(uint16_t wpm) {
-    cw_wpm = wpm;
+    cw_wpm = wpm < WPM_MIN ? WPM_MIN : wpm;
+    cw_wpm = wpm > WPM_MAX ? WPM_MAX : cw_wpm;
     init_buffers();
 }
 
@@ -313,7 +333,7 @@ void CWGenerator::update_statemachine() {
             } else {
                 put_pixel(WS2812_COLOR_OFF);
             }
-        } 
+        }
         nextstate = STATE_IDLE;
     } else if (inchar_index > inchar_endindex) {
         inchar_index = 0;
@@ -372,18 +392,28 @@ void *CWGenerator::get_audio_buffer() {
     uint32_t pos;
 
     if ((curstate == STATE_DIT || curstate == STATE_DAH) && (cw_volume > 0)) {
-        if (inchar_index > inchar_endindex) {
-            // if this is the last part of the signal, use the last signal_buffer
-            // substract one cw_sample_buffer_size as inchar is increased during update_state
-            pos = ((inchar_index - cw_sample_buffer_size) % signal_buffer_period) + signal_buffer_pause_index - signal_buffer_period;
-            return (&(signal_buffer[pos]));
-        } else {
-            pos = (inchar_index - cw_sample_buffer_size) % signal_buffer_period;
-            return (&(signal_buffer[pos]));
+        uint32_t inchar_index_start = inchar_index - cw_sample_buffer_size;             // current position = inchar_index - cw_sample_buffer_size as the index already points to the next position
+        for (int i = 0; i < cw_sample_buffer_size; i++) {
+            int curpos = inchar_index_start - cw_sample_buffer_size + i;                      
+
+            if (curpos < inchar_endindex) {
+                // we are still within the character
+                output_buffer[i] = signal_buffer[curpos % signal_buffer_period];
+
+                // apply envelop shaping
+                if (curpos < cw_risetime_samples) {
+                    output_buffer[i] *= cw_keyshape[curpos];
+                } else if (curpos > inchar_endindex - cw_risetime_samples) {
+                    output_buffer[i] *= cw_keyshape[inchar_endindex - curpos];
+                }
+            } else {
+                output_buffer[i] = 0;
+            }
         }
     } else {
-        return (&(signal_buffer[signal_buffer_pause_index]));
+        memset(output_buffer, 0, sizeof(int16_t) * cw_sample_buffer_size);
     }
+    return output_buffer;
 }
 
 /*
