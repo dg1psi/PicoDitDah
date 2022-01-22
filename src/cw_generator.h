@@ -109,6 +109,18 @@ public:
     uint16_t get_wpm();
 
     /* 
+     * set the rise time of the Blackman window
+     * @param wpm: rise time in ms
+     */
+    void set_risetime(float risetime);
+
+    /* 
+     * get the speed auf the morse signal in WPM (Words Per Minute)
+     * @return rise time in ms
+     */
+    float get_risetime();
+
+    /* 
      * set the volume of the morse signal [0:100]
      * @param volume: volume [%] of the morse signal
      */

@@ -144,15 +144,18 @@ void CWGenerator::init_buffers() {
 
     // calculate the audio buffer size, the start of the pause buffer and allocate the memory
     signal_buffer_period = ceil(cw_sample_rate / (float)(cw_frequency));
+    signal_dit_length_index = (60 / (50 * (float)(cw_wpm))) * cw_sample_rate;                                               // length of DIT t_dit = 60 / (50 * wpm). Source: https://morsecode.world/international/timing.html
+    signal_dit_length_index = ceil((float)(signal_dit_length_index) / signal_buffer_period) * signal_buffer_period;         // must be a whole multiple of the tone period to ensure tone ends after a full period
 
     // calculate nr. of samples for envelope shaping
     cw_risetime_samples = ceil(cw_risetime * cw_sample_rate / 1000) + 1;
+    cw_risetime_samples = cw_risetime_samples > signal_dit_length_index ? signal_dit_length_index : cw_risetime_samples;
 
     signal_buffer = (int16_t *)malloc(sizeof(int16_t) * signal_buffer_period);
     output_buffer = (int16_t *)malloc(sizeof(int16_t) * cw_sample_buffer_size);
     cw_keyshape = (float *)malloc(sizeof(float) * cw_risetime_samples);
 
-    for (int i = 0; i < signal_buffer_period; i++) {                                                                     // generate a single sine wave
+    for (int i = 0; i < signal_buffer_period; i++) {                                                                        // generate a single sine wave
         signal_buffer[i] = cw_volume * sin(i * 2.0 * M_PI * (float)(cw_frequency) / (float)(cw_sample_rate));
     }
 
@@ -162,8 +165,6 @@ void CWGenerator::init_buffers() {
         cw_keyshape[i] = abs(0.42 - 0.50 * cos(M_PI * i / (cw_risetime_samples - 1)) + 0.08 * cos(2 * M_PI * i / (cw_risetime_samples - 1)));
     }
 
-    signal_dit_length_index = (60 / (50 * (float)(cw_wpm))) * cw_sample_rate;                                  // length of DIT t_dit = 60 / (50 * wpm). Source: https://morsecode.world/international/timing.html
-    signal_dit_length_index = ceil((float)(signal_dit_length_index) / signal_buffer_period) * signal_buffer_period;  // must be a whole multiple of the tone period to ensure tone ends after a full period
     inchar_index = 0;
 }
 
@@ -216,6 +217,23 @@ void CWGenerator::set_wpm(uint16_t wpm) {
  */
 uint16_t CWGenerator::get_wpm() {
     return (cw_wpm);
+}
+
+/* 
+ * set the rise time of the Blackman window
+ * @param wpm: rise time in ms
+ */
+void CWGenerator::set_risetime(float risetime) {
+    cw_risetime = risetime;
+    init_buffers();
+}
+
+/* 
+ * get the speed auf the morse signal in WPM (Words Per Minute)
+ * @return rise time in ms
+ */
+float CWGenerator::get_risetime() {
+    return cw_risetime;
 }
 
 /*
