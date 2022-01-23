@@ -43,8 +43,8 @@
 
 #define DEFAULT_FREQUENCY 700       // default frequency for the audio tone
 #define DEFAULT_WPM 20              // default speed for the morse code in WPM (Words Per Minute)
-#define DEFAULT_VOLUME 100          // default volume [%] of the morse signal
-#define DEFAULT_RISETIME 6          // default risetime of the Blackman window
+#define DEFAULT_VOLUME 75           // default volume [%] of the morse signal
+#define DEFAULT_RISETIME 10         // default risetime of the Blackman window
 
 #define WPM_MIN 10                  // minimum speed in WPM
 #define WPM_MAX 99                  // maximum speed in WPM

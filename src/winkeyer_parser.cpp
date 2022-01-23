@@ -245,6 +245,14 @@ uint32_t WinKeyerParser::parse_admin_command(uint8_t *message, uint32_t offset, 
                 cw_generator->set_volume(message[offset + 2] * 100 / 4);
             }
             break;
+        case 26:                // Set rise time of Blackman window
+            if ((length - offset >= 3) && (message[offset + 2] >= 1) && (message[offset + 2] <= 50)) {
+                cw_generator->set_risetime((float)((uint8_t)message[offset + 2]));
+            }
+            break;
+        case 27:                // Get rise time of Blackman window
+            message[0] = (uint8_t)cw_generator->get_risetime();
+            return 1;
         default:                // Unknown admin command - ignore
             break;
     }
@@ -263,7 +271,7 @@ uint32_t WinKeyerParser::parse_message(uint8_t *message, uint32_t length, uint32
     }
 
     for (int i = 0; i < length; i++) {
-        if ((message[i] >= 0x61) || (message[i] <= 0x7a)) {
+        if ((message[i] >= 0x61) && (message[i] <= 0x7a)) {
             // convert small letters to upper case
             message[i] -= 0x20;
         }
