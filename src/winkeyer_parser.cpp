@@ -166,13 +166,16 @@ WinKeyerParser::WinKeyerParser(CWGenerator *cwgen) {
  * @param maxsize buffer size
  * @return number of bytes added to the result;
  */
-uint32_t WinKeyerParser::parse_admin_command(uint8_t *message, uint32_t offset, uint32_t length, uint32_t maxsize) {
+uint32_t WinKeyerParser::parse_admin_command(uint8_t *message, int *offset, uint32_t length, uint32_t maxsize) {
+    int offs = *offset;
+    (*offset)++;              // skip parameter in message
+
     // only accept full commands
-    if (length - offset < 2) {
+    if (length - offs < 2) {
         return 0;
     }
 
-    switch(message[offset + 1]) {
+    switch(message[offs + 1]) {
         case 0:                 // Calibrate - ignored
             break;
         case 1:                 // Reset - ignored
@@ -185,8 +188,9 @@ uint32_t WinKeyerParser::parse_admin_command(uint8_t *message, uint32_t offset, 
         case 3:                 // Host Close - ignored
             break;
         case 4:                 // Echo Test
-            if (length - offset >= 3) {
-                message[0] = message[offset + 2];
+            if (length - offs >= 3) {
+                message[0] = message[offs + 2];
+                (*offset)++;    // skip parameter in message
                 return 1;
             }
             break;
@@ -241,13 +245,15 @@ uint32_t WinKeyerParser::parse_admin_command(uint8_t *message, uint32_t offset, 
             message[0] = 0x01;  // always report SMT IC
             return 1;
         case 25:                // Set Sidetone Volume
-            if ((length - offset >= 3) && (message[offset + 2] >= 0) && (message[offset + 2] <= 4)) {
-                cw_generator->set_volume(message[offset + 2] * 100 / 4);
+            (*offset)++;              // skip parameter in message
+            if ((length - offs >= 3) && (message[offs + 2] >= 0) && (message[offs + 2] <= 4)) {
+                cw_generator->set_volume(message[offs + 2] * 100 / 4);
             }
             break;
         case 26:                // Set rise time of Blackman window
-            if ((length - offset >= 3) && (message[offset + 2] >= 1) && (message[offset + 2] <= 50)) {
-                cw_generator->set_risetime((float)((uint8_t)message[offset + 2]));
+            (*offset)++;              // skip parameter in message
+            if ((length - offs >= 3) && (message[offs + 2] >= 1) && (message[offs + 2] <= 50)) {
+                cw_generator->set_risetime((float)((uint8_t)message[offs + 2]));
             }
             break;
         case 27:                // Get rise time of Blackman window
@@ -256,6 +262,7 @@ uint32_t WinKeyerParser::parse_admin_command(uint8_t *message, uint32_t offset, 
         default:                // Unknown admin command - ignore
             break;
     }
+
     return 0;
 }
 
@@ -283,7 +290,7 @@ uint32_t WinKeyerParser::parse_message(uint8_t *message, uint32_t length, uint32
 
             switch (message[i]) {
                 case 0x00:                // Admin command
-                    return parse_admin_command(message, i, length, maxsize);
+                    return parse_admin_command(message, &i, length, maxsize);
                 case 0x01:                // Sidetone Freq
                     if (length >= 2) {
                         if ((wk_version < 3) && (message[i+1] >= 1) && (message[i+1] <= 0x0a)) {
@@ -291,11 +298,13 @@ uint32_t WinKeyerParser::parse_message(uint8_t *message, uint32_t length, uint32
                         } else if ((wk_version == 3) && (message[i+1] >= 15) && (message[i+1] <= 125)) {
                             cw_generator->set_frequency(62500/message[i+1]);
                         }
+                        i++;              // skip parameter in message
                     }
                     break;
                 case 0x02:                // Speed
                     if ((length >= 2) && (message[i+1] >= 5) && (message[i+1] <= 99)) {
                         cw_generator->set_wpm(message[i+1]);
+                        i++;              // skip parameter in message
                     }
                     break;
                 case 0x03:                // Weighting - ignored

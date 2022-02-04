@@ -68,7 +68,7 @@ private:
      * @param maxsize buffer size
      * @return number of bytes added to the result;
      */
-    uint32_t parse_admin_command(uint8_t *message, uint32_t offset, uint32_t length, uint32_t maxsize);
+    uint32_t parse_admin_command(uint8_t *message, int *offset, uint32_t length, uint32_t maxsize);
 };
 
 #endif
