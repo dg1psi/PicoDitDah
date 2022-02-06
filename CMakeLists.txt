@@ -34,7 +34,7 @@ pico_enable_stdio_uart(picoditdah 1)
 pico_enable_stdio_usb(picoditdah 0)
 
 # Add the standard library to the build
-target_link_libraries(picoditdah pico_stdlib tinyusb_device tinyusb_board hardware_pio)
+target_link_libraries(picoditdah pico_stdlib tinyusb_device tinyusb_board hardware_pio pico_bootrom)
 target_include_directories(picoditdah PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src)
 
 pico_add_extra_outputs(picoditdah)

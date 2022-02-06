@@ -24,6 +24,7 @@
  */
 
 #include "winkeyer_parser.h"
+#include "pico/bootrom.h"
 
 /* 
  * class that parses the WinKeyer commands passed through a serial interface
@@ -176,89 +177,91 @@ uint32_t WinKeyerParser::parse_admin_command(uint8_t *message, int *offset, uint
     }
 
     switch(message[offs + 1]) {
-        case 0:                 // Calibrate - ignored
+        case 0:                 // 0x00: Calibrate - ignored
             break;
-        case 1:                 // Reset - ignored
+        case 1:                 // 0x01: Reset - ignored
             break;
-        case 2:                 // Host Open
+        case 2:                 // 0x02: Host Open
             message[0] = 31;    // echo back revision 31 for rev 31.03 (version according to datasheet)
             message[1] = 03;
             wk_version = 1;     // according to datasheet WK1 mode is set on host open
             return 2;
-        case 3:                 // Host Close - ignored
+        case 3:                 // 0x03: Host Close - ignored
             break;
-        case 4:                 // Echo Test
+        case 4:                 // 0x04: Echo Test
             if (length - offs >= 3) {
                 message[0] = message[offs + 2];
                 (*offset)++;    // skip parameter in message
                 return 1;
             }
             break;
-        case 5:                 // Paddle A2D - always return 0, according to datasheet
+        case 5:                 // 0x05: Paddle A2D - always return 0, according to datasheet
             message[0] = 0;
             return 1;
-        case 6:                 // Speed A2D - always return 0, according to datasheet
+        case 6:                 // 0x06: Speed A2D - always return 0, according to datasheet
             message[0] = 0;
             return 1;
-        case 7:                 // Get Values - always return 0, according to datasheet
+        case 7:                 // 0x07: Get Values - always return 0, according to datasheet
             message[0] = 0;
             return 1;
-        case 8:                 // Reserved - ignored
+        case 8:                 // 0x08: Reserved - ignored
             break;
-        case 9:                 // Get FW Major Rev
+        case 9:                 // 0x09: Get FW Major Rev
             message[0] = 31;    // echo back revision 31 for rev 31.03 (version according to datasheet)
             return 1;
-        case 10:                // Set WK1 Mode
+        case 10:                // 0x0A: Set WK1 Mode
             wk_version = 1;
             break;
-        case 11:                // Set WK2 Mode
+        case 11:                // 0x0B: Set WK2 Mode
             wk_version = 2;
             break;
-        case 12:                // Dump EEPROM - ignored
+        case 12:                // 0x0C: Dump EEPROM - ignored
             break;
-        case 13:                // Load EEPROM - ignored
+        case 13:                // 0x0D: Load EEPROM - ignored
             break;
-        case 14:                // Send Message - ignored
+        case 14:                // 0x0E: Send Message - ignored
             break;
-        case 15:                // Load X1MODE - ignored
+        case 15:                // 0x0F: Load X1MODE - ignored
             break;
-        case 16:                // Firmware Update - ignored
+        case 16:                // 0x10: Firmware Update - ignored
             break;
-        case 17:                // Set Low Baud - ignored
+        case 17:                // 0x11: Set Low Baud - ignored
             break;
-        case 18:                // Set High Baud - ignored
+        case 18:                // 0x12: Set High Baud - ignored
             break;
-        case 19:                // Set RTTY Mode Registers - ignored
+        case 19:                // 0x13: Set RTTY Mode Registers - ignored
             break;
-        case 20:                // Set WK3 Mode
+        case 20:                // 0x14: Set WK3 Mode
             wk_version = 3;
             break;
-        case 21:                // Read Back Vcc
+        case 21:                // 0x15: Read Back Vcc
             message[0] = 52;    // always report back ~5V (according to datasheet: 26214/byte value = Voltage * 100)
             return 1;
-        case 22:                // Load X2MODE - ignored
+        case 22:                // 0x16: Load X2MODE - ignored
             break;
-        case 23:                // Get FW Minor Rev
+        case 23:                // 0x17: Get FW Minor Rev
             message[0] = 03;    // echo back revision 31 for rev 31.03 (version according to datasheet)
             return 1;
-        case 24:                // Get IC Type
+        case 24:                // 0x18: Get IC Type
             message[0] = 0x01;  // always report SMT IC
             return 1;
-        case 25:                // Set Sidetone Volume
+        case 25:                // 0x19: Set Sidetone Volume
             (*offset)++;              // skip parameter in message
             if ((length - offs >= 3) && (message[offs + 2] >= 0) && (message[offs + 2] <= 4)) {
                 cw_generator->set_volume(message[offs + 2] * 100 / 4);
             }
             break;
-        case 26:                // Set rise time of Blackman window
+        case 26:                // 0x1A: Set rise time of Blackman window
             (*offset)++;              // skip parameter in message
             if ((length - offs >= 3) && (message[offs + 2] >= 1) && (message[offs + 2] <= 50)) {
                 cw_generator->set_risetime((float)((uint8_t)message[offs + 2]));
             }
             break;
-        case 27:                // Get rise time of Blackman window
+        case 27:                // 0x1B: Get rise time of Blackman window
             message[0] = (uint8_t)cw_generator->get_risetime();
             return 1;
+        case 28:                // 0x1C: enter bootloader with default values
+            reset_usb_boot(0, 0);
         default:                // Unknown admin command - ignore
             break;
     }
