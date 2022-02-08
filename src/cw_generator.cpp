@@ -43,8 +43,10 @@
 
 #define DEFAULT_FREQUENCY 700       // default frequency for the audio tone
 #define DEFAULT_WPM 20              // default speed for the morse code in WPM (Words Per Minute)
-#define DEFAULT_VOLUME 75           // default volume [%] of the morse signal
+#define DEFAULT_VOLUME 100          // default volume [%] of the morse signal
 #define DEFAULT_RISETIME 10         // default risetime of the Blackman window
+
+#define MAX_VOLUME 24575            // maximum volume (32768 * 0.75) - 1
 
 #define WPM_MIN 10                  // minimum speed in WPM
 #define WPM_MAX 99                  // maximum speed in WPM
@@ -91,7 +93,7 @@ CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size, uint
     cw_sample_buffer_size = sample_buffer_size;
     cw_frequency = freq;
     cw_wpm = wpm;
-    cw_volume = volume * 32767 / 100;
+    cw_volume = volume * MAX_VOLUME / 100;
     cw_risetime = risetime;
 
     signal_buffer = NULL;
@@ -242,7 +244,7 @@ float CWGenerator::get_risetime() {
  */
 void CWGenerator::set_volume(uint16_t vol) {
     if (vol * 32767 / 100 != cw_volume) {
-        cw_volume = vol * 32767 / 100;
+        cw_volume = vol * MAX_VOLUME / 100;
 
         if (vol > 0) {
             init_buffers();
@@ -389,13 +391,13 @@ void CWGenerator::update_statemachine() {
                 printf("Illegal state.\n");
                 curstate = STATE_IDLE;
         }
-    } else if (curstate == STATE_DIT_PAUSE) {
-        // check alread during the pause for the status of the paddle to avoid missed key presses
+    } else if ((curstate == STATE_DIT_PAUSE) || (curstate == STATE_DIT)) {
+        // check alread during the pause and while tone is still playing for the status of the paddle to avoid missed key presses
         if (debouncer.read(DAH_GPIO) == 0) {
             nextstate = STATE_DAH;
         }
-    } else if (curstate == STATE_DAH_PAUSE) {
-        // check alread during the pause for the status of the paddle to avoid missed key presses
+    } else if ((curstate == STATE_DAH_PAUSE) || (curstate == STATE_DAH)) {
+        // check alread during the pause and while tone is still playing for the status of the paddle to avoid missed key presses
         if (debouncer.read(DIT_GPIO) == 0) {
             nextstate = STATE_DIT;
         }
