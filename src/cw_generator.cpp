@@ -110,7 +110,10 @@ CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size, uint
     gpio_pull_up(DIT_GPIO);
     gpio_pull_up(DAH_GPIO);
     debouncer.debounce_gpio(DIT_GPIO);
+    debouncer.set_debounce_time(DIT_GPIO, 0.5);
     debouncer.debounce_gpio(DAH_GPIO);
+    debouncer.set_debounce_time(DAH_GPIO, 0.5);
+
 
     // initialize PIO used for Neopixel LED
     ws2812_pio = pio1;              // use PIO1 as default (PIO0 is used for button debouncer)
