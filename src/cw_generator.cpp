@@ -307,7 +307,6 @@ void CWGenerator::set_state(CW_CHARACTERS ch, uint32_t ws2812_color) {
 
     switch (ch) {
         case CHAR_PAUSE:
-            nextstate = STATE_IDLE;
             inchar_endindex = signal_dit_length_index * INTRA_CHAR_PAUSE_UNITS;
             if (curstate == STATE_DIT) {
                 curstate = STATE_DIT_PAUSE;
@@ -316,10 +315,12 @@ void CWGenerator::set_state(CW_CHARACTERS ch, uint32_t ws2812_color) {
             }
             break;
         case CHAR_DIT:
+            nextstate = STATE_IDLE;                                 // reset nextstate at the beginning of the DIT
             inchar_endindex = signal_dit_length_index * DIT_UNITS;
             curstate = STATE_DIT;
             break;
         case CHAR_DAH:
+            nextstate = STATE_IDLE;                                 // reset nextstate at the beginning of the DAH
             inchar_endindex = signal_dit_length_index * DAH_UNITS;
             curstate = STATE_DAH;
             break;
@@ -332,6 +333,9 @@ void CWGenerator::set_state(CW_CHARACTERS ch, uint32_t ws2812_color) {
  * Updates the state machine and checks the paddle position
  */
 void CWGenerator::update_statemachine() {
+    int dit = debouncer.read(DIT_GPIO);
+    int dah = debouncer.read(DAH_GPIO);
+    
     if (curstate == STATE_INIT) {
         inchar_index = 0;
         inchar_endindex = cw_sample_rate / signal_buffer_period;  // wait for 1s to avoid start is not recorded
@@ -347,10 +351,10 @@ void CWGenerator::update_statemachine() {
             clear_queue();
             set_state(CHAR_DAH, WS2812_COLOR_PADDLE);
         } else {
-            if (debouncer.read(DIT_GPIO) == 0) {
+            if (dit == 0) {
                 clear_queue();
                 set_state(CHAR_DIT, WS2812_COLOR_PADDLE);
-            } else if (debouncer.read(DAH_GPIO) == 0) {
+            } else if (dah == 0) {
                 clear_queue();
                 set_state(CHAR_DAH, WS2812_COLOR_PADDLE);
             } else if (queue_try_remove(&cw_character_queue, &(curchar)) == true) {
@@ -371,7 +375,7 @@ void CWGenerator::update_statemachine() {
                 set_state(CHAR_PAUSE, WS2812_COLOR_OFF);
                 break;
             case STATE_DIT_PAUSE:
-                if (debouncer.read(DAH_GPIO) == 0) {
+                if (dah == 0) {
                     set_state(CHAR_DAH, WS2812_COLOR_PADDLE);
                 } else {
                     curstate = STATE_IDLE;
@@ -379,7 +383,7 @@ void CWGenerator::update_statemachine() {
                 }
                 break;
             case STATE_DAH_PAUSE:
-                if (debouncer.read(DIT_GPIO) == 0) {
+                if (dit == 0) {
                     set_state(CHAR_DIT, WS2812_COLOR_PADDLE);
                 } else {
                     curstate = STATE_IDLE;
@@ -396,12 +400,14 @@ void CWGenerator::update_statemachine() {
         }
     } else if ((curstate == STATE_DIT_PAUSE) || (curstate == STATE_DIT)) {
         // check alread during the pause and while tone is still playing for the status of the paddle to avoid missed key presses
-        if (debouncer.read(DAH_GPIO) == 0) {
+        // only consider second half of DIT-phase
+        if ((dah == 0) && (inchar_index > inchar_endindex / 2)) {
             nextstate = STATE_DAH;
         }
     } else if ((curstate == STATE_DAH_PAUSE) || (curstate == STATE_DAH)) {
         // check alread during the pause and while tone is still playing for the status of the paddle to avoid missed key presses
-        if (debouncer.read(DIT_GPIO) == 0) {
+        // only consider second half of DIT-phase
+        if ((dit == 0) && (inchar_index > inchar_endindex / 2)) {
             nextstate = STATE_DIT;
         }
     }
