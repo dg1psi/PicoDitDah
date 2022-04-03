@@ -401,13 +401,13 @@ void CWGenerator::update_statemachine() {
     } else if ((curstate == STATE_DIT_PAUSE) || (curstate == STATE_DIT)) {
         // check alread during the pause and while tone is still playing for the status of the paddle to avoid missed key presses
         // only consider second half of DIT-phase
-        if ((dah == 0) && (inchar_index > inchar_endindex / 2)) {
+        if ((dah == 0) && (inchar_index > inchar_endindex * 0.75)) {
             nextstate = STATE_DAH;
         }
     } else if ((curstate == STATE_DAH_PAUSE) || (curstate == STATE_DAH)) {
         // check alread during the pause and while tone is still playing for the status of the paddle to avoid missed key presses
         // only consider second half of DIT-phase
-        if ((dit == 0) && (inchar_index > inchar_endindex / 2)) {
+        if ((dit == 0) && (inchar_index > inchar_endindex * 0.75)) {
             nextstate = STATE_DIT;
         }
     }

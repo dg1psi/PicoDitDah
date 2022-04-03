@@ -245,11 +245,11 @@ uint32_t WinKeyerParser::parse_admin_command(uint8_t *message, int *offset, uint
         case 24:                // 0x18: Get IC Type
             message[0] = 0x01;  // always report SMT IC
             return 1;
-        case 25:                // 0x19: Set Sidetone Volume
-            (*offset)++;              // skip parameter in message
+        case 25:                // 0x19: Set Sidetone Volume - ignored as changes lead to disturbed audio on Windows
+            /*(*offset)++;              // skip parameter in message
             if ((length - offs >= 3) && (message[offs + 2] >= 0) && (message[offs + 2] <= 4)) {
                 cw_generator->set_volume(message[offs + 2] * 100 / 4);
-            }
+            }*/
             break;
         case 26:                // 0x1A: Set rise time of Blackman window
             (*offset)++;              // skip parameter in message
