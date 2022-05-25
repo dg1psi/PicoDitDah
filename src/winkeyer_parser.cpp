@@ -257,9 +257,13 @@ uint32_t WinKeyerParser::parse_admin_command(uint8_t *message, int *offset, uint
                 cw_generator->set_risetime((float)((uint8_t)message[offs + 2]));
             }
             break;
-        case 27:                // 0x1B: Get rise time of Blackman window
+/*        case 27:                // 0x1B: Get rise time of Blackman window
             message[0] = (uint8_t)cw_generator->get_risetime();
-            return 1;
+            return 1;*/
+        case 27:                // 0x1B: Set 
+            (*offset)++;
+            cw_generator->set_frequency((uint8_t)message[offs + 2] * 10);
+            break;
         case 28:                // 0x1C: enter bootloader with default values
             reset_usb_boot(0, 0);
         default:                // Unknown admin command - ignore

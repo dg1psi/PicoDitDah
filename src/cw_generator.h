@@ -169,7 +169,16 @@ private:
     uint16_t cw_volume;                         // volume of the audio signal [0:32767]
     float cw_risetime;                          // rise time of keyed signal in ms
     uint32_t cw_risetime_samples;               // nr. of samples for the rise time
+    uint32_t cw_risetime_samples_maxsize;       // maximum number of samples for rise time
     float *cw_keyshape;                         // buffer containing the key shape factors of the Blackman window
+    uint32_t cw_keyshape_stepsize;              // step size between samples in keyshape table
+
+    float *lpf_A;                               // filter coefficients of the Butterworth low pass filter
+    float *lpf_d1;
+    float *lpf_d2;
+    float *lpf_w0;
+    float *lpf_w1;
+    float *lpf_w2;
 
     int16_t *signal_buffer;                     // buffer containing a single sine wave
     int16_t *output_buffer;                     // buffer used to tramsmit the audio to the USB port
@@ -193,6 +202,11 @@ private:
      * initializes the audio buffers for the currently set frequency
      */
     void init_buffers();
+
+    /*
+     * initializes the Butterworth low pass filter
+     */
+    void init_filter();
 
     /*
      * clears the character queue

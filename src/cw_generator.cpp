@@ -51,6 +51,11 @@
 #define WPM_MIN 10                  // minimum speed in WPM
 #define WPM_MAX 99                  // maximum speed in WPM
 
+#define RISETIME_MIN 1              // minimum risetime of the Blackman window
+#define RISETIME_MAX 100            // maximum risetime of the Blackman window
+
+#define LPF_HALFORDER 4/2           // order / 2 of the Butterworth low pass filter
+
 // NeoPixel (WS2812) configuration
 #define IS_RGBW true
 #ifdef PICO_DEFAULT_WS2812_PIN
@@ -96,9 +101,24 @@ CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size, uint
     cw_volume = volume * MAX_VOLUME / 100;
     cw_risetime = risetime;
 
-    signal_buffer = NULL;
-    output_buffer = NULL;
-    cw_keyshape = NULL;
+    // signal_buffer = NULL;
+    // output_buffer = NULL;
+    // cw_keyshape = NULL;
+
+    output_buffer = (int16_t *)malloc(sizeof(int16_t) * (cw_sample_buffer_size + 1));
+
+    uint32_t signal_buffer_maxsize = ceil(cw_sample_rate / (float)(audio_minfreq));
+    signal_buffer = (int16_t *)malloc(sizeof(int16_t) * signal_buffer_maxsize);
+
+    cw_risetime_samples_maxsize = ceil(RISETIME_MAX * cw_sample_rate / 1000);
+    cw_keyshape = (float *)malloc(sizeof(float) * cw_risetime_samples_maxsize);
+
+    // generate signal shaping based on Blackman-Harris: https://en.wikipedia.org/wiki/Window_function#Blackman%E2%80%93Harris_window
+    // we only use the first half (rise)
+    std::fill_n(cw_keyshape, cw_risetime_samples_maxsize, 1);
+    for (int i = 0; i < cw_risetime_samples_maxsize; i++) {
+        cw_keyshape[i] = abs(0.35875-0.48829*cos(M_PI * i / cw_risetime_samples_maxsize) + 0.14128*cos(2 * M_PI * i / cw_risetime_samples_maxsize) - 0.01168*cos(4 * M_PI * i / cw_risetime_samples_maxsize));
+    }
 
     init_buffers();
 
@@ -133,16 +153,6 @@ CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size, uint
  * initializes the audio buffers for the currently set frequency
  */
 void CWGenerator::init_buffers() {
-    if (signal_buffer != NULL) {
-        free(signal_buffer);
-    }
-    if (output_buffer != NULL) {
-        free(output_buffer);
-    }
-    if (cw_keyshape != NULL) {
-        free(cw_keyshape);
-    }
-
     // limit the user passed audio frequency to the valid range
     cw_frequency = cw_frequency > audio_maxfreq ? audio_maxfreq : cw_frequency;
     cw_frequency = cw_frequency < audio_minfreq ? audio_minfreq : cw_frequency;
@@ -152,25 +162,44 @@ void CWGenerator::init_buffers() {
     signal_dit_length_index = (60 / (50 * (float)(cw_wpm))) * cw_sample_rate;                                               // length of DIT t_dit = 60 / (50 * wpm). Source: https://morsecode.world/international/timing.html
     signal_dit_length_index = ceil((float)(signal_dit_length_index) / signal_buffer_period) * signal_buffer_period;         // must be a whole multiple of the tone period to ensure tone ends after a full period
 
-    // calculate nr. of samples for envelope shaping
-    cw_risetime_samples = ceil(cw_risetime * cw_sample_rate / 1000) + 1;
-    cw_risetime_samples = cw_risetime_samples > signal_dit_length_index ? signal_dit_length_index : cw_risetime_samples;
 
-    signal_buffer = (int16_t *)malloc(sizeof(int16_t) * signal_buffer_period);
-    output_buffer = (int16_t *)malloc(sizeof(int16_t) * cw_sample_buffer_size);
-    cw_keyshape = (float *)malloc(sizeof(float) * cw_risetime_samples);
+    // calculate nr. of samples for envelope shaping
+    cw_risetime_samples = ceil(cw_risetime * cw_sample_rate / 1000);
+    cw_risetime_samples = cw_risetime_samples > signal_dit_length_index/2 ? signal_dit_length_index/2 : cw_risetime_samples;
+
+    // calculate step size for envelope shaping
+    cw_keyshape_stepsize = ceil(cw_risetime_samples_maxsize / cw_risetime_samples);
 
     for (int i = 0; i < signal_buffer_period; i++) {                                                                        // generate a single sine wave
         signal_buffer[i] = cw_volume * sin(i * 2.0 * M_PI * (float)(cw_frequency) / (float)(cw_sample_rate));
     }
 
-    // generate signal shaping based on Blackman: https://en.wikipedia.org/wiki/Window_function#Blackman_window
-    // we only use the first half (rise)
-    for (int i = 0; i < cw_risetime_samples; i++) {
-        cw_keyshape[i] = abs(0.42 - 0.50 * cos(M_PI * i / (cw_risetime_samples - 1)) + 0.08 * cos(2 * M_PI * i / (cw_risetime_samples - 1)));
-    }
-
+    init_filter();
     inchar_index = 0;
+}
+
+/*
+ * initializes the Butterworth low pass filter
+ */
+void CWGenerator::init_filter() {
+
+    float a = tan(M_PI * cw_frequency / cw_sample_rate);
+    float r;
+    float s = cw_sample_rate;
+    lpf_A = (float *)malloc(LPF_HALFORDER * sizeof(float));
+    lpf_d1 = (float *)malloc(LPF_HALFORDER * sizeof(float));
+    lpf_d2 = (float *)malloc(LPF_HALFORDER * sizeof(float));
+    lpf_w0 = (float *)calloc(LPF_HALFORDER, sizeof(float));
+    lpf_w1 = (float *)calloc(LPF_HALFORDER, sizeof(float));
+    lpf_w2 = (float *)calloc(LPF_HALFORDER, sizeof(float));
+
+    for (int i = 0; i < LPF_HALFORDER; ++i) {
+        r = sin(M_PI * (2 * i + 1) / (4 * LPF_HALFORDER));
+        s = a * a + 2.0 * a * r + 1.0;
+        lpf_A[i] = a * a / s;
+        lpf_d1[i] = 2 * (1 - a * a) / s;
+        lpf_d2[i] = -(a * a - 2 * a * r + 1) / s;
+    }
 }
 
 /*
@@ -229,7 +258,8 @@ uint16_t CWGenerator::get_wpm() {
  * @param wpm: rise time in ms
  */
 void CWGenerator::set_risetime(float risetime) {
-    cw_risetime = risetime;
+    cw_risetime = risetime < RISETIME_MIN ? RISETIME_MIN : risetime;
+    cw_risetime = risetime > RISETIME_MAX ? RISETIME_MAX : risetime;
     init_buffers();
 }
 
@@ -422,28 +452,38 @@ void CWGenerator::update_statemachine() {
 void *CWGenerator::get_audio_buffer() {
     uint32_t pos;
 
+    // always start with a clean buffer
+    memset(output_buffer, 0, sizeof(int16_t) * cw_sample_buffer_size);
+
     if ((curstate == STATE_DIT || curstate == STATE_DAH) && (cw_volume > 0)) {
-        uint32_t inchar_index_start = inchar_index - cw_sample_buffer_size;             // current position = inchar_index - cw_sample_buffer_size as the index already points to the next position
         for (int i = 0; i < cw_sample_buffer_size; i++) {
-            int curpos = inchar_index_start - cw_sample_buffer_size + i;                      
+            int curpos = inchar_index - cw_sample_buffer_size + i;                      
 
             if (curpos < inchar_endindex) {
                 // we are still within the character
                 output_buffer[i] = signal_buffer[curpos % signal_buffer_period];
 
+
                 // apply envelop shaping
-                if (curpos < cw_risetime_samples) {
-                    output_buffer[i] *= cw_keyshape[curpos];
-                } else if (curpos > inchar_endindex - cw_risetime_samples) {
-                    output_buffer[i] *= cw_keyshape[inchar_endindex - curpos];
+                if (curpos * cw_keyshape_stepsize < cw_risetime_samples_maxsize) {
+                    output_buffer[i] = ceil((float)output_buffer[i] * cw_keyshape[curpos * cw_keyshape_stepsize]);
+                } else if ((inchar_endindex - curpos) * cw_keyshape_stepsize < cw_risetime_samples_maxsize) {
+                    output_buffer[i] = ceil((float)output_buffer[i] * cw_keyshape[(inchar_endindex - curpos) * cw_keyshape_stepsize]);
                 }
-            } else {
-                output_buffer[i] = 0;
+
+                // apply low pass filter
+                float x = output_buffer[i];
+                for(int j = 0; j < LPF_HALFORDER; j++) {
+                    lpf_w0[j] = lpf_d1[j] * lpf_w1[j] + lpf_d2[j] * lpf_w2[j] + x;
+                    x = lpf_A[j] * (lpf_w0[j] + 2 * lpf_w1[j] + lpf_w2[j]);
+                    lpf_w2[j] = lpf_w1[j];
+                    lpf_w1[j] = lpf_w0[j];
+                }
+                output_buffer[i] = ceil(x);
             }
         }
-    } else {
-        memset(output_buffer, 0, sizeof(int16_t) * cw_sample_buffer_size);
     }
+    
     return output_buffer;
 }
 
