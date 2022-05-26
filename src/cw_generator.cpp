@@ -33,29 +33,6 @@
  * class that generates and audio buffer that contains morse code signals.
  */
 
-#define DIT_GPIO 3                  // GPIO port for the DIT paddle
-#define DIT_UNITS 1                 // number of time units for a DIT
-#define DAH_GPIO 4                  // GPIO port for the DAH paddle
-#define DAH_UNITS 3                 // number of time units for a DAH
-#define INTRA_CHAR_PAUSE_UNITS 1    // number of time units for a pause within a characters
-#define INTER_CHAR_PAUSE_UNITS 3    // number of time units for a pause between characters
-#define INT_WORD_PAUSE_UNITS 7      // number of time units for a pause between words
-
-#define DEFAULT_FREQUENCY 700       // default frequency for the audio tone
-#define DEFAULT_WPM 20              // default speed for the morse code in WPM (Words Per Minute)
-#define DEFAULT_VOLUME 100          // default volume [%] of the morse signal
-#define DEFAULT_RISETIME 10         // default risetime of the Blackman window
-
-#define MAX_VOLUME 24575            // maximum volume (32768 * 0.75) - 1
-
-#define WPM_MIN 10                  // minimum speed in WPM
-#define WPM_MAX 99                  // maximum speed in WPM
-
-#define RISETIME_MIN 1              // minimum risetime of the Blackman window
-#define RISETIME_MAX 100            // maximum risetime of the Blackman window
-
-#define LPF_HALFORDER 4/2           // order / 2 of the Butterworth low pass filter
-
 // NeoPixel (WS2812) configuration
 #define IS_RGBW true
 #ifdef PICO_DEFAULT_WS2812_PIN
@@ -179,19 +156,17 @@ void CWGenerator::init_buffers() {
 }
 
 /*
- * initializes the Butterworth low pass filter
+ * Initializes the Butterworth low pass filter based on book Recursive Digital Filters: A Concise Guide (https://abrazol.com/books/filter1/)
  */
 void CWGenerator::init_filter() {
 
     float a = tan(M_PI * cw_frequency / cw_sample_rate);
     float r;
     float s = cw_sample_rate;
-    lpf_A = (float *)malloc(LPF_HALFORDER * sizeof(float));
-    lpf_d1 = (float *)malloc(LPF_HALFORDER * sizeof(float));
-    lpf_d2 = (float *)malloc(LPF_HALFORDER * sizeof(float));
-    lpf_w0 = (float *)calloc(LPF_HALFORDER, sizeof(float));
-    lpf_w1 = (float *)calloc(LPF_HALFORDER, sizeof(float));
-    lpf_w2 = (float *)calloc(LPF_HALFORDER, sizeof(float));
+
+    std::fill_n(lpf_w0, LPF_HALFORDER, 0);
+    std::fill_n(lpf_w1, LPF_HALFORDER, 0);
+    std::fill_n(lpf_w2, LPF_HALFORDER, 0);
 
     for (int i = 0; i < LPF_HALFORDER; ++i) {
         r = sin(M_PI * (2 * i + 1) / (4 * LPF_HALFORDER));
