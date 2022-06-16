@@ -54,7 +54,7 @@
 #define DEFAULT_VOLUME 100          // default volume [%] of the morse signal
 #define DEFAULT_RISETIME 10         // default risetime of the Blackman window
 
-#define MAX_VOLUME 24575            // maximum volume (32768 * 0.75) - 1
+#define MAX_VOLUME 32000            // maximum volume (32768 * 0.75) - 1
 
 #define WPM_MIN 10                  // minimum speed in WPM
 #define WPM_MAX 99                  // maximum speed in WPM
@@ -197,14 +197,7 @@ private:
     float *cw_keyshape;                         // buffer containing the key shape factors of the Blackman window
     uint32_t cw_keyshape_stepsize;              // step size between samples in keyshape table
 
-    float lpf_A[LPF_HALFORDER];                 // filter coefficients of the Butterworth low pass filter
-    float lpf_d1[LPF_HALFORDER];
-    float lpf_d2[LPF_HALFORDER];
-    float lpf_w0[LPF_HALFORDER];
-    float lpf_w1[LPF_HALFORDER];
-    float lpf_w2[LPF_HALFORDER];
-
-    int16_t *signal_buffer;                     // buffer containing a single sine wave
+    float *signal_buffer;                     // buffer containing a single sine wave
     int16_t *output_buffer;                     // buffer used to tramsmit the audio to the USB port
     uint32_t signal_buffer_period;              // sine wave period
     uint32_t signal_dit_length_index;           // number of samples for a DIT in the current CW speed

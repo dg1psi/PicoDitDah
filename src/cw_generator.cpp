@@ -85,7 +85,7 @@ CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size, uint
     output_buffer = (int16_t *)malloc(sizeof(int16_t) * (cw_sample_buffer_size + 1));
 
     uint32_t signal_buffer_maxsize = ceil(cw_sample_rate / (float)(audio_minfreq));
-    signal_buffer = (int16_t *)malloc(sizeof(int16_t) * signal_buffer_maxsize);
+    signal_buffer = (float *)malloc(sizeof(float) * signal_buffer_maxsize);
 
     cw_risetime_samples_maxsize = ceil(RISETIME_MAX * cw_sample_rate / 1000);
     cw_keyshape = (float *)malloc(sizeof(float) * cw_risetime_samples_maxsize);
@@ -94,7 +94,8 @@ CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size, uint
     // we only use the first half (rise)
     std::fill_n(cw_keyshape, cw_risetime_samples_maxsize, 1);
     for (int i = 0; i < cw_risetime_samples_maxsize; i++) {
-        cw_keyshape[i] = abs(0.35875-0.48829*cos(M_PI * i / cw_risetime_samples_maxsize) + 0.14128*cos(2 * M_PI * i / cw_risetime_samples_maxsize) - 0.01168*cos(4 * M_PI * i / cw_risetime_samples_maxsize));
+        //cw_keyshape[i] = (0.42 - 0.50 * cos(M_PI * i / cw_risetime_samples_maxsize) + 0.08 * cos(2 * M_PI * i / cw_risetime_samples_maxsize));
+        cw_keyshape[i] = 0.35875-0.48829*cos(M_PI * i / cw_risetime_samples_maxsize) + 0.14128*cos(2 * M_PI * i / cw_risetime_samples_maxsize) - 0.01168*cos(4 * M_PI * i / cw_risetime_samples_maxsize);
     }
 
     init_buffers();
@@ -131,6 +132,7 @@ CWGenerator::CWGenerator(uint32_t sample_rate, uint32_t sample_buffer_size, uint
  */
 void CWGenerator::init_buffers() {
     // limit the user passed audio frequency to the valid range
+
     cw_frequency = cw_frequency > audio_maxfreq ? audio_maxfreq : cw_frequency;
     cw_frequency = cw_frequency < audio_minfreq ? audio_minfreq : cw_frequency;
 
@@ -142,13 +144,14 @@ void CWGenerator::init_buffers() {
 
     // calculate nr. of samples for envelope shaping
     cw_risetime_samples = ceil(cw_risetime * cw_sample_rate / 1000);
+    //cw_risetime_samples = ceil((float)(cw_risetime * cw_sample_rate / 1000) / signal_buffer_period) * signal_buffer_period;
     cw_risetime_samples = cw_risetime_samples > signal_dit_length_index/2 ? signal_dit_length_index/2 : cw_risetime_samples;
 
     // calculate step size for envelope shaping
     cw_keyshape_stepsize = ceil(cw_risetime_samples_maxsize / cw_risetime_samples);
 
     for (int i = 0; i < signal_buffer_period; i++) {                                                                        // generate a single sine wave
-        signal_buffer[i] = cw_volume * sin(i * 2.0 * M_PI * (float)(cw_frequency) / (float)(cw_sample_rate));
+        signal_buffer[i] = cw_volume * sin(i * 2.0 * M_PI * 1 / (float)(signal_buffer_period));                             // use rounded value of cw_sample_rate / cw_frequency, to avoid distortion in audio signal
     }
 
     init_filter();
@@ -159,22 +162,6 @@ void CWGenerator::init_buffers() {
  * Initializes the Butterworth low pass filter based on book Recursive Digital Filters: A Concise Guide (https://abrazol.com/books/filter1/)
  */
 void CWGenerator::init_filter() {
-
-    float a = tan(M_PI * cw_frequency / cw_sample_rate);
-    float r;
-    float s = cw_sample_rate;
-
-    std::fill_n(lpf_w0, LPF_HALFORDER, 0);
-    std::fill_n(lpf_w1, LPF_HALFORDER, 0);
-    std::fill_n(lpf_w2, LPF_HALFORDER, 0);
-
-    for (int i = 0; i < LPF_HALFORDER; ++i) {
-        r = sin(M_PI * (2 * i + 1) / (4 * LPF_HALFORDER));
-        s = a * a + 2.0 * a * r + 1.0;
-        lpf_A[i] = a * a / s;
-        lpf_d1[i] = 2 * (1 - a * a) / s;
-        lpf_d2[i] = -(a * a - 2 * a * r + 1) / s;
-    }
 }
 
 /*
@@ -436,25 +423,16 @@ void *CWGenerator::get_audio_buffer() {
 
             if (curpos < inchar_endindex) {
                 // we are still within the character
-                output_buffer[i] = signal_buffer[curpos % signal_buffer_period];
+                float curval = signal_buffer[curpos % signal_buffer_period];
 
 
                 // apply envelop shaping
                 if (curpos * cw_keyshape_stepsize < cw_risetime_samples_maxsize) {
-                    output_buffer[i] = ceil((float)output_buffer[i] * cw_keyshape[curpos * cw_keyshape_stepsize]);
+                    curval = curval * cw_keyshape[curpos * cw_keyshape_stepsize];
                 } else if ((inchar_endindex - curpos) * cw_keyshape_stepsize < cw_risetime_samples_maxsize) {
-                    output_buffer[i] = ceil((float)output_buffer[i] * cw_keyshape[(inchar_endindex - curpos) * cw_keyshape_stepsize]);
+                    curval = curval * cw_keyshape[(inchar_endindex - curpos) * cw_keyshape_stepsize];
                 }
-
-                // apply low pass filter
-                float x = output_buffer[i];
-                for(int j = 0; j < LPF_HALFORDER; j++) {
-                    lpf_w0[j] = lpf_d1[j] * lpf_w1[j] + lpf_d2[j] * lpf_w2[j] + x;
-                    x = lpf_A[j] * (lpf_w0[j] + 2 * lpf_w1[j] + lpf_w2[j]);
-                    lpf_w2[j] = lpf_w1[j];
-                    lpf_w1[j] = lpf_w0[j];
-                }
-                output_buffer[i] = ceil(x);
+                output_buffer[i] = roundf(curval);
             }
         }
     }
